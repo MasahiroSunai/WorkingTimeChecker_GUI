@@ -75,6 +75,102 @@ New-Item `
     -Force |
 Out-Null
 
+# =====================================
+# PythonスクリプトZIPを作成します
+# =====================================
+$pythonScriptsDirectory = Join-Path `
+    $root `
+    "resources\python-scripts"
+
+$pythonScriptsZipPath = Join-Path `
+    $root `
+    "resources\python-scripts.zip"
+
+if (-not (Test-Path -LiteralPath $pythonScriptsDirectory)) {
+    throw (
+        "Pythonスクリプトフォルダーがありません: " +
+        $pythonScriptsDirectory
+    )
+}
+
+Write-Host ">> Pythonスクリプトを構文確認します"
+
+& python `
+    -m `
+    compileall `
+    -q `
+    $pythonScriptsDirectory
+
+if ($LASTEXITCODE -ne 0) {
+    throw (
+        "Pythonスクリプトの構文確認に失敗しました。" +
+        "終了コード: $LASTEXITCODE"
+    )
+}
+
+# compileallが作成したキャッシュをZIPへ含めません。
+Get-ChildItem `
+    -LiteralPath $pythonScriptsDirectory `
+    -Directory `
+    -Filter "__pycache__" `
+    -Recurse `
+    -ErrorAction SilentlyContinue |
+Remove-Item `
+    -Recurse `
+    -Force
+
+Get-ChildItem `
+    -LiteralPath $pythonScriptsDirectory `
+    -File `
+    -Filter "*.pyc" `
+    -Recurse `
+    -ErrorAction SilentlyContinue |
+Remove-Item `
+    -Force
+
+Write-Host "[OK] Pythonスクリプトの構文確認完了"
+Write-Host ">> PythonスクリプトZIPを作成します"
+
+Remove-Item `
+    -LiteralPath $pythonScriptsZipPath `
+    -Force `
+    -ErrorAction SilentlyContinue
+
+Add-Type `
+    -AssemblyName System.IO.Compression.FileSystem
+
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $pythonScriptsDirectory,
+    $pythonScriptsZipPath,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $false
+)
+
+if (-not (Test-Path -LiteralPath $pythonScriptsZipPath)) {
+    throw (
+        "PythonスクリプトZIPを作成できませんでした: " +
+        $pythonScriptsZipPath
+    )
+}
+
+$pythonScriptsZipInfo =
+    Get-Item `
+        -LiteralPath $pythonScriptsZipPath
+
+if ($pythonScriptsZipInfo.Length -eq 0) {
+    throw "PythonスクリプトZIPが空です"
+}
+
+Write-Host "[OK] PythonスクリプトZIPを作成しました"
+Write-Host "ZIP: $pythonScriptsZipPath"
+Write-Host (
+    "ZIP Size: " +
+    [System.Math]::Round(
+        $pythonScriptsZipInfo.Length / 1KB,
+        2
+    ) +
+    " KB"
+)
 Write-Host ">> CLIを単一exeとして発行します"
 
 dotnet publish `
@@ -133,17 +229,99 @@ if (Test-Path $runtimeArchivePath) {
 
 Write-Host ">> runtime.zipを作成します"
 
-Compress-Archive `
-    -Path (
-        Join-Path `
-            $temporaryZipDirectory `
-            "*"
-    ) `
-    -DestinationPath $runtimeArchivePath `
-    -CompressionLevel Optimal
+# Runtime確認で起動したCLIや、ウイルス対策ソフトによる
+# 一時的なファイルロックが解除されるまで待ちます。
+Get-Process `
+    -Name "WorkingTimeChecker.Cli" `
+    -ErrorAction SilentlyContinue |
+Stop-Process `
+    -Force `
+    -ErrorAction SilentlyContinue
 
-if (-not (Test-Path $runtimeArchivePath)) {
-    throw "runtime.zipが作成されませんでした"
+Start-Sleep -Seconds 3
+
+Add-Type `
+    -AssemblyName System.IO.Compression.FileSystem
+
+$runtimeArchiveCreated =
+    $false
+
+$lastRuntimeArchiveError =
+    $null
+
+for ($attempt = 1; $attempt -le 5; $attempt++) {
+    try {
+        Remove-Item `
+            -LiteralPath $runtimeArchivePath `
+            -Force `
+            -ErrorAction SilentlyContinue
+
+        Write-Host "runtime.zip作成試行: $attempt / 5"
+
+        [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            $temporaryZipDirectory,
+            $runtimeArchivePath,
+            [System.IO.Compression.CompressionLevel]::Optimal,
+            $false
+        )
+
+        if (-not (Test-Path -LiteralPath $runtimeArchivePath)) {
+            throw "runtime.zipが作成されませんでした"
+        }
+
+        $runtimeArchiveInfo =
+            Get-Item `
+                -LiteralPath $runtimeArchivePath
+
+        if ($runtimeArchiveInfo.Length -eq 0) {
+            throw "作成されたruntime.zipが空です"
+        }
+
+        $runtimeArchiveCreated =
+            $true
+
+        break
+    }
+    catch {
+        $lastRuntimeArchiveError =
+            $_
+
+        Write-Warning (
+            "runtime.zipの作成に失敗しました。" +
+            "5秒後に再試行します: " +
+            $_.Exception.Message
+        )
+
+        Remove-Item `
+            -LiteralPath $runtimeArchivePath `
+            -Force `
+            -ErrorAction SilentlyContinue
+
+        Get-Process `
+            -Name "WorkingTimeChecker.Cli" `
+            -ErrorAction SilentlyContinue |
+        Stop-Process `
+            -Force `
+            -ErrorAction SilentlyContinue
+
+        Start-Sleep -Seconds 5
+    }
+}
+
+if (-not $runtimeArchiveCreated) {
+    $lastRuntimeArchiveErrorMessage =
+        "詳細不明"
+
+    if ($null -ne $lastRuntimeArchiveError) {
+        $lastRuntimeArchiveErrorMessage =
+            $lastRuntimeArchiveError.Exception.Message
+    }
+
+    throw (
+        "runtime.zipを作成できませんでした。" +
+        "`n最後のエラー: " +
+        $lastRuntimeArchiveErrorMessage
+    )
 }
 
 $archiveHash =
