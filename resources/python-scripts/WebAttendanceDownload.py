@@ -1,0 +1,207 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import utils.totp as totp
+import os
+import sys
+import glob
+from datetime import datetime
+import time
+import shutil
+import argparse
+import selenium.webdriver as webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.select import Select
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from utils.config_loader import load_config
+from utils.month_utils import resolve_target_month
+from utils.path_utils import expand_path
+from utils.logger_utils import setup_logger
+
+logger = setup_logger("WebAttendanceDownload")
+
+def get_base_path() -> str:
+    # PyInstallerで実行されているかどうかをチェック
+    if getattr(sys, "frozen", False):
+        # EXEの実行ファイルのパスを取得
+        return os.path.dirname(sys.executable)
+    else:
+        # スクリプトの実行ファイルのパスを取得
+        return os.path.dirname(os.path.abspath(__file__))
+
+def wait_for_download(tmp_download_dir: str, timeout_second: int = 60) -> str:
+    """ダウンロード完了まで待機し、ファイルパスを返す"""
+    for i in range(timeout_second + 1):
+        files = glob.glob(f'{tmp_download_dir}\\*')
+
+        valid_files = [
+            f for f in files
+            if os.path.splitext(f)[1].lower() not in ('.crdownload', '.tmp')
+        ]
+
+        if len(valid_files) == 1:
+            time.sleep(1)  # 完了直前対策
+            return valid_files[0]
+
+        if len(valid_files) > 1:
+            raise RuntimeError(
+                f"想定外のダウンロードファイル数: {valid_files}"
+            )
+
+        if i >= timeout_second:
+            raise RuntimeError("ダウンロードに失敗しました。")
+
+        time.sleep(1)
+
+    raise RuntimeError("ダウンロードに失敗しました。")
+
+def download_attendance(config, username, password, secret_key):
+    # Initialize TOTP
+    totp_generator = totp.Totp(secret_key)
+
+    tmp_download_dir = os.path.join(get_base_path(), 'Download', datetime.now().strftime('%Y%m%d_%H%M%S'))
+    download_dir = os.path.join(get_base_path(), 'Download')
+    os.makedirs(tmp_download_dir, exist_ok=True)
+
+    # ------ ChromeDriver のオプション ------
+    service = Service()
+    service.creation_flags = 0x08000000  # ヘッドレスモードで DevTools listening on ws:~~ を表示させない
+    options = Options()
+    options.add_argument("--headless=new")  # ヘッドレスモードで起動する
+    prefs = {
+        "credentials_enable_service": False,  # パスワード保存のポップアップを無効
+        "savefile.default_directory": tmp_download_dir,  # ダイアログ(名前を付けて保存)の初期ディレクトリを指定
+        "download.default_directory": tmp_download_dir,  # ダウンロード先を指定
+        "download_bubble.partial_view_enabled": False,  # ダウンロードが完了したときの通知(吹き出し/下部表示)を無効にする
+        "plugins.always_open_pdf_externally": True,  # Chromeの内部PDFビューアを使わない(URLにアクセスすると直接ダウンロードされる)
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True
+    }
+    options.add_experimental_option("prefs", prefs)
+
+    # ------ ChromeDriver の起動 ------
+    driver = webdriver.Chrome(service=service, options=options)
+
+    url = f'{config["apps"]["base_url"]}/{config["apps"]["filter_id"]}{config["apps"]["csv_suffix"]}'
+    sel = config["selenium"]
+
+    try:
+        # Navigate to the login page
+        driver.get(url)
+
+        driver.find_element(By.XPATH, sel["login"]["username_input"]).send_keys(username)
+        driver.find_element(By.XPATH, sel["login"]["login_button"]).click()
+
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located(
+                (By.XPATH, sel["login"]["password_input"])
+            )
+        )
+
+        driver.find_element(By.XPATH, sel["login"]["password_input"]).send_keys(password)
+        driver.find_element(By.XPATH, sel["login"]["login_button"]).click()
+
+        # Wait for the page to load
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located(
+                (By.XPATH, sel["totp"]["input"])
+            )
+        )
+
+        # Find the TOTP field and enter the generated TOTP code
+        totp_code = totp_generator.generate_totp()
+        driver.find_element(By.XPATH, sel["totp"]["input"]).send_keys(totp_code)
+
+        # Submit the form
+        driver.find_element(By.XPATH, sel["totp"]["submit_button"]).click()
+
+        # Wait for the page to load and download attendance
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located(
+                (By.XPATH, sel["export"]["encoding_select"])
+            )
+        )
+
+        logger.info(f"Current URL: {driver.current_url}")
+        logger.info(f"Page Title: {driver.title}")
+
+        Select(driver.find_element(By.XPATH, sel["export"]["encoding_select"])).select_by_value(sel["export"]["encoding_value"])
+        Select(driver.find_element(By.XPATH, sel["export"]["format_select"])).select_by_value(sel["export"]["format_value"])
+
+        WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable(
+                (By.XPATH, sel["export"]["export_button"])
+            )
+        )
+        driver.find_element(By.XPATH, sel["export"]["export_button"]).click()
+
+        download_file = wait_for_download(tmp_download_dir)
+
+        if not os.path.exists(download_file):
+            raise FileNotFoundError(f"ダウンロードファイルが存在しません: {download_file}")
+
+        filePath = shutil.move(download_file, os.path.join(download_dir, os.path.basename(download_file)))
+        return filePath
+    except Exception as e:
+        try:
+            screenshot = os.path.join(
+                get_base_path(),
+                "logs",
+                f"WebAttendanceError_{datetime.now():%Y%m%d_%H%M%S}.png"
+            )
+
+            driver.save_screenshot(screenshot)
+
+            logger.error(f"Screenshot saved: {screenshot}")
+            logger.error(f"Current URL: {driver.current_url}")
+            logger.error(f"Page Title: {driver.title}")
+
+        except Exception:
+            pass
+
+        logger.error(f"Download dir files: {glob.glob(tmp_download_dir + '\\*')}")
+        logger.exception(f"エラーが発生しました: {e}")
+        raise
+    finally:
+        # Close the browser
+        if driver:
+            driver.quit()
+        if os.path.exists(tmp_download_dir):
+            logger.debug(f"tmp_download_dir cleanup: {tmp_download_dir}")
+            shutil.rmtree(tmp_download_dir)
+
+def main():
+    logger.info("WebAttendanceDownload start")
+
+    try:
+        parser = argparse.ArgumentParser(description="AppsFSからWeb勤怠をダウンロード")
+        parser.add_argument("--config", default="config/config.yaml", help="config.yaml のパス")
+        args = parser.parse_args()
+        config = load_config(args.config)
+
+        username = os.environ.get("APPS_ID")
+        if not username:
+            raise RuntimeError("AppsFS ID not found")
+        password = os.environ.get("APPS_PASSWORD")
+        if not password:
+            raise RuntimeError("AppsFS Password not found")
+        secret_key = os.environ.get("APPS_TOTP_SECRET")
+        if not secret_key:
+            raise RuntimeError("TOTP Secret not found")
+        
+        vars = resolve_target_month(config)
+        csvPath = expand_path(config["paths"]["web_attendance_file"], vars)
+
+        shutil.move(download_attendance(config, username, password, secret_key), csvPath)
+        logger.info(f"Web勤怠を {csvPath} に保存しました")
+
+    except Exception as e:
+        logger.exception(f"エラーが発生しました: {e}")
+        raise
+
+if __name__ == "__main__":
+    main()
+    

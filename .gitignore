@@ -424,3 +424,80 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# BEGIN WorkingTimeChecker specific rules
+
+# 利用者ごとの実設定
+config.yaml
+**/config.yaml
+
+# 配布用サンプル設定は追跡する
+!config.example.yaml
+!**/config.example.yaml
+
+# 認証情報はWindows資格情報マネージャーで管理する
+.env
+.env.*
+*.env
+*.env.*
+
+# Config画面が作成するバックアップ
+**/Config/Backup/
+**/config/Backup/
+config.local-backup_*.yaml
+**/config.local-backup_*.yaml
+
+# 移行・実装時の一時ファイル
+migration/
+add-config-window.ps1
+change-dry-run-combobox.ps1
+
+# Runtime確認時のログ
+**/runtime-check-logs/
+
+# END WorkingTimeChecker specific rules
+
+# BEGIN WorkingTimeChecker generated runtime rules
+
+# Downloaded and generated Python Runtime
+resources/python-runtime/
+resources/python-runtime.zip
+
+# Runtime embedded in the GUI at release-build time
+src/WorkingTimeChecker.Gui/Payload/runtime.zip
+src/WorkingTimeChecker.Gui/Payload/runtime-manifest.json
+
+# Release outputs
+artifacts/
+
+# GUIに組み込むRuntimeはRelease作成時に生成する
+src/WorkingTimeChecker.Gui/Payload/runtime.zip
+src/WorkingTimeChecker.Gui/Payload/runtime-manifest.json
+
+# 実設定
+config.yaml
+**/config.yaml
+
+# サンプル設定は追跡する
+!config.example.yaml
+!**/config.example.yaml
+
+# 認証情報はWindows資格情報マネージャーで管理する
+.env
+.env.*
+*.env
+*.env.*
+
+# Configバックアップ
+**/Config/Backup/
+**/config/Backup/
+config.local-backup_*.yaml
+**/config.local-backup_*.yaml
+
+# 作業用ファイル
+migration/
+add-config-window.ps1
+change-dry-run-combobox.ps1
+
+# END WorkingTimeChecker generated runtime rules
+resources/python-scripts.zip

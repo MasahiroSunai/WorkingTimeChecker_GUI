@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WorkingTimeChecker.Cli/WorkingTimeChecker.Cli.csproj" />
+    <Project Path="src/WorkingTimeChecker.Core/WorkingTimeChecker.Core.csproj" />
+    <Project Path="src/WorkingTimeChecker.Gui/WorkingTimeChecker.Gui.csproj" />
+    <Project Path="src/WorkingTimeChecker.Runner/WorkingTimeChecker.Runner.csproj" />
+  </Folder>
+</Solution>

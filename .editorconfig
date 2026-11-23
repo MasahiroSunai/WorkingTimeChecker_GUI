@@ -1,0 +1,67 @@
+root = true
+
+# 既定設定
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C#ソース
+[*.cs]
+end_of_line = crlf
+charset = utf-8
+indent_style = space
+indent_size = 4
+tab_width = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C#プロジェクト・ソリューション
+[*.{csproj,props,targets,sln,slnx}]
+end_of_line = crlf
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# PowerShell
+[*.ps1]
+end_of_line = crlf
+charset = utf-8-bom
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Python
+[*.py]
+end_of_line = lf
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# YAML
+[*.{yaml,yml}]
+end_of_line = lf
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# JSON
+[*.json]
+end_of_line = lf
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Markdownでは行末スペースを意味のある改行に使う場合がある
+[*.md]
+trim_trailing_whitespace = false
+insert_final_newline = true
