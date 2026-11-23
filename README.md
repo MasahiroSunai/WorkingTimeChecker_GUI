@@ -143,8 +143,7 @@ powershell.exe `
     -NoProfile `
     -ExecutionPolicy Bypass `
     -File ".\build-runtime.ps1" `
-    -RuntimeVersion "1.0.1" `
-    -RuntimeIdentifier "win-x64"
+    -RuntimeVersion "1.0.1"
 ```
 
 Runtime作成後、GUIプロジェクトのPayloadへ次が配置されます。
