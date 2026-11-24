@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Execution;
 
 public sealed class PythonRunner
 {

@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.Text;
-using WorkingTimeChecker.Core;
+using WorkingTimeChecker.Core.Configuration;
+using WorkingTimeChecker.Core.Execution;
+using WorkingTimeChecker.Core.Logging;
+using WorkingTimeChecker.Core.Runtime;
 using WorkingTimeChecker.Core.Security;
 
 Console.OutputEncoding =
@@ -13,13 +16,13 @@ try
     options =
         ParseArguments(args);
 
-    ApplicationPaths.Configure(
+    RuntimePathOptions.Configure(
         options.ConfigPath,
         options.LogDirectory,
         options.EnvFilePath);
 
     Directory.CreateDirectory(
-        ApplicationPaths.LogDirectory);
+        RuntimePathOptions.LogDirectory);
 }
 catch (Exception exception)
 {
@@ -33,7 +36,7 @@ catch (Exception exception)
 
 using var logger =
     new AppLogger(
-        ApplicationPaths.LogDirectory);
+        RuntimePathOptions.LogDirectory);
 
 using var cancellationTokenSource =
     new CancellationTokenSource();
@@ -59,7 +62,7 @@ try
 
     logger.WriteLine(
         "[OK] LogDirectory: " +
-        ApplicationPaths.LogDirectory);
+        RuntimePathOptions.LogDirectory);
 
     if (options.RuntimeCheck)
     {
@@ -69,26 +72,26 @@ try
     }
 
     if (!File.Exists(
-            ApplicationPaths.ConfigPath))
+            RuntimePathOptions.ConfigPath))
     {
         logger.WriteError(
             "[NG] config.yamlが見つかりません。");
 
         logger.WriteError(
-            ApplicationPaths.ConfigPath);
+            RuntimePathOptions.ConfigPath);
 
         return 2;
     }
 
     logger.WriteLine(
         "[OK] ConfigPath: " +
-        ApplicationPaths.ConfigPath);
+        RuntimePathOptions.ConfigPath);
     if (File.Exists(
-            ApplicationPaths.EnvFilePath))
+            RuntimePathOptions.EnvFilePath))
     {
         logger.WriteLine(
             "[INFO] .env移行元: " +
-            ApplicationPaths.EnvFilePath);
+            RuntimePathOptions.EnvFilePath);
     }
     else
     {
@@ -124,7 +127,7 @@ try
 
     var loadedCredentialCount =
         credentialBootstrapper.LoadOrMigrate(
-            ApplicationPaths.EnvFilePath,
+            RuntimePathOptions.EnvFilePath,
             logger.WriteLine);
 
     logger.WriteLine(

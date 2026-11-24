@@ -1,6 +1,7 @@
+using WorkingTimeChecker.Core.Configuration;
 using WorkingTimeChecker.Core.Workload;
 
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Execution;
 
 public sealed class JobRunner
 {
@@ -268,7 +269,7 @@ _pythonRunner = pythonRunner;
         return _pythonRunner.RunAsync(
             _pythonExecutablePath,
             scriptPath,
-            ApplicationPaths.ConfigPath,
+            RuntimePathOptions.ConfigPath,
             writeLog,
             cancellationToken
         );
@@ -283,7 +284,7 @@ _pythonRunner = pythonRunner;
             new CSharpExcelAggregationStep();
 
         return aggregationStep.RunAsync(
-            ApplicationPaths.ConfigPath,
+            RuntimePathOptions.ConfigPath,
             writeLog,
             cancellationToken,
             validateOnly

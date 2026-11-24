@@ -1,9 +1,9 @@
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Configuration;
 
 /// <summary>
 /// CLIが使用する実行時パスを管理します。
 /// </summary>
-public static class ApplicationPaths
+public static class RuntimePathOptions
 {
     private static string? _configPathOverride;
     private static string? _logDirectoryOverride;

@@ -1,6 +1,6 @@
 using System.IO.Compression;
 
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Runtime;
 
 public sealed class PythonRuntimeExtractor
 {

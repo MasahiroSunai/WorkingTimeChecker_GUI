@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Reflection;
 
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Runtime;
 
 public sealed class RuntimeExtractor
 {

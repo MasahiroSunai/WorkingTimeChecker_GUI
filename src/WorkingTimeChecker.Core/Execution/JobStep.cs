@@ -1,4 +1,4 @@
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Execution;
 
 public enum JobStepType
 {

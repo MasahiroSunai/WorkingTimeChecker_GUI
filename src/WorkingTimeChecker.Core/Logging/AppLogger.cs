@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Logging;
 
 public sealed class AppLogger : IDisposable
 {

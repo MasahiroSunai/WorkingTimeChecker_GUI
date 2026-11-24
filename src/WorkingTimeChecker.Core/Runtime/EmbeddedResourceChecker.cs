@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace WorkingTimeChecker.Core;
+namespace WorkingTimeChecker.Core.Runtime;
 
 public static class EmbeddedResourceChecker
 {
