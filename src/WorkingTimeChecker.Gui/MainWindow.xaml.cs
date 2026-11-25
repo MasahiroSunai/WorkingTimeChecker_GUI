@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 
 using WorkingTimeChecker.Core.Application;
+using WorkingTimeChecker.Core.Configuration;
 namespace WorkingTimeChecker.Gui;
 
 public partial class MainWindow : Window
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
     private readonly bool _configCopiedOnStartup;
     private readonly RuntimeInstallResult _runtimeInstallResult;
     private readonly IReadOnlyList<string> _startupMessages;
+    private readonly ConfigFileService _configFileService = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Process? _runningProcess;
     private string _publishDirectory = string.Empty;
@@ -129,45 +131,31 @@ public partial class MainWindow : Window
     }
 
 
-    private void ResolveApplicationPaths()
+    private void LoadConfigurationSummary()
     {
-        var startDirectory =
-            AppContext.BaseDirectory;
+        var targetMonth =
+            _configFileService.ReadScalar(
+                ApplicationPaths.ConfigFilePath,
+                "system",
+                "target_month");
 
-        var currentDirectory =
-            new DirectoryInfo(startDirectory);
+        var dryRunText =
+            _configFileService.ReadScalar(
+                ApplicationPaths.ConfigFilePath,
+                "system",
+                "dry_run");
 
-        while (currentDirectory is not null)
-        {
-            var publishCandidate =
-                Path.Combine(
-                    currentDirectory.FullName,
-                    "publish"
-                );
+        var dryRun =
+            bool.TryParse(
+                dryRunText,
+                out var parsedDryRun) &&
+            parsedDryRun;
 
-            var executableCandidate =
-                Path.Combine(
-                    publishCandidate,
-                    "WorkingTimeChecker.Cli.exe"
-                );
+        TargetMonthText.Text =
+            targetMonth ?? "-";
 
-            if (File.Exists(executableCandidate))
-            {
-                SetApplicationPaths(
-                    publishCandidate,
-                    executableCandidate
-                );
-
-                return;
-            }
-
-            currentDirectory =
-                currentDirectory.Parent;
-        }
-        throw new FileNotFoundException(
-            "WorkingTimeChecker.Cli.exeが見つかりません。" +
-            " Runtimeを再インストールしてください。"
-        );
+        UpdateDryRunBadge(
+            dryRun);
     }
 
     private void SetApplicationPaths(
@@ -213,23 +201,23 @@ public partial class MainWindow : Window
                 );
             }
 
-            var configText =
-                File.ReadAllText(
+            var dryRunText =
+                _configFileService.ReadScalar(
                     _configPath,
-                    Encoding.UTF8
-                );
-
-            var dryRun =
-                ReadYamlScalar(
-                    configText,
-                    "dry_run"
-                );
+                    "system",
+                    "dry_run");
 
             var targetMonth =
-                ReadYamlScalar(
-                    configText,
-                    "target_month"
-                );
+                _configFileService.ReadScalar(
+                    _configPath,
+                    "system",
+                    "target_month");
+
+            var dryRun =
+                bool.TryParse(
+                    dryRunText,
+                    out var parsedDryRun) &&
+                parsedDryRun;
 
             TargetMonthText.Text =
                 FormatTargetMonth(
@@ -282,33 +270,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string? ReadYamlScalar(
-        string yaml,
-        string key)
-    {
-        var match =
-            Regex.Match(
-                yaml,
-                "^\\s*" +
-                Regex.Escape(key) +
-                "\\s*:\\s*([^#\\r\\n]+)",
-                RegexOptions.Multiline
-            );
-
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        return match
-            .Groups[1]
-            .Value
-            .Trim()
-            .Trim(
-                '"',
-                '\''
-            );
-    }
 
     private static string FormatTargetMonth(
         string? targetMonth)
@@ -346,15 +307,8 @@ public partial class MainWindow : Window
     }
 
     private void UpdateDryRunBadge(
-        string? value)
+        bool isDryRun)
     {
-        var isDryRun =
-            string.Equals(
-                value,
-                "true",
-                StringComparison.OrdinalIgnoreCase
-            );
-
         if (isDryRun)
         {
             DryRunText.Text =

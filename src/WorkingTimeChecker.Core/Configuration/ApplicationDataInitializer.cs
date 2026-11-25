@@ -1,4 +1,6 @@
-namespace WorkingTimeChecker.Core.Application;
+using WorkingTimeChecker.Core.Application;
+
+namespace WorkingTimeChecker.Core.Configuration;
 
 /// <summary>
 /// LocalAppData内にアプリケーションの保存先を準備します。

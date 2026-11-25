@@ -4,6 +4,8 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using WorkingTimeChecker.Core;
+using WorkingTimeChecker.Core.Application;
+using WorkingTimeChecker.Core.Configuration;
 
 namespace WorkingTimeChecker.Gui;
 
@@ -13,8 +15,14 @@ namespace WorkingTimeChecker.Gui;
 /// </summary>
 public partial class SettingsWindow : Window
 {
-    private const int MaximumBackupCount =
-        30;
+    private readonly ConfigBackupService _configBackupService =
+        new();
+
+    private readonly ConfigFileService _configFileService =
+        new();
+
+    private readonly ConfigValidationService _configValidationService;
+
     private const string DryRunKey =
         "system.dry_run";
 
@@ -106,18 +114,18 @@ public partial class SettingsWindow : Window
     public SettingsWindow(
         string configPath)
     {
-        InitializeComponent();
-
-        if (string.IsNullOrWhiteSpace(
-                configPath))
-        {
-            throw new ArgumentException(
-                "設定ファイルのパスが空です。",
-                nameof(configPath));
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(
+            configPath);
 
         _configPath =
-            configPath;
+            Path.GetFullPath(
+                configPath);
+
+        _configValidationService =
+            new ConfigValidationService(
+                _configFileService);
+
+        InitializeComponent();
 
         Loaded +=
             SettingsWindow_Loaded;
@@ -158,7 +166,9 @@ public partial class SettingsWindow : Window
                     originalLines);
 
             var backupPath =
-                CreateBackup();
+                _configBackupService.CreateBackup(
+                    _configPath,
+                    ApplicationPaths.ConfigBackupDirectory);
 
             var temporaryPath =
                 _configPath +
@@ -169,8 +179,16 @@ public partial class SettingsWindow : Window
                 updatedLines,
                 new UTF8Encoding(false));
 
-            ValidateSavedFile(
-                temporaryPath);
+            var validationResult =
+                _configValidationService.ValidateFile(temporaryPath);
+
+            if (!validationResult.IsValid)
+            {
+                throw new InvalidDataException(
+                    string.Join(
+                        Environment.NewLine,
+                        validationResult.Errors));
+            }
 
             File.Copy(
                 temporaryPath,
@@ -764,94 +782,6 @@ public partial class SettingsWindow : Window
             editor is TextBox textBox
                 ? textBox.Text.Trim()
                 : string.Empty;
-    }
-
-    private string CreateBackup()
-    {
-        var backupDirectory =
-            Path.Combine(
-                Path.GetDirectoryName(
-                    _configPath)
-                ?? throw new InvalidOperationException(
-                    "設定フォルダーを取得できません。"),
-                "Backup");
-
-        Directory.CreateDirectory(
-            backupDirectory);
-
-        var backupPath =
-            Path.Combine(
-                backupDirectory,
-                "config_" +
-                DateTime.Now.ToString(
-                    "yyyyMMdd_HHmmss_fff") +
-                ".yaml");
-
-        File.Copy(
-            _configPath,
-            backupPath,
-            overwrite: false);
-
-        DeleteObsoleteBackups(
-            backupDirectory);
-
-        return backupPath;
-    }
-
-    /// <summary>
-    /// Configのバックアップを最新30件に整理します。
-    /// </summary>
-    private static void DeleteObsoleteBackups(
-        string backupDirectory)
-    {
-        var obsoleteBackupPaths =
-            Directory
-                .GetFiles(
-                    backupDirectory,
-                    "config_*.yaml")
-                .OrderByDescending(
-                    path =>
-                        Path.GetFileName(path),
-                    StringComparer.OrdinalIgnoreCase)
-                .Skip(
-                    MaximumBackupCount)
-                .ToArray();
-
-        foreach (var obsoleteBackupPath in
-                 obsoleteBackupPaths)
-        {
-            File.Delete(
-                obsoleteBackupPath);
-        }
-    }
-    private static void ValidateSavedFile(
-        string path)
-    {
-        var text =
-            File.ReadAllText(
-                path,
-                Encoding.UTF8);
-
-        foreach (var requiredSection in
-                 new[]
-                 {
-                     "system:",
-                     "confluence:",
-                     "apps:",
-                     "paths:",
-                     "rocketchat:",
-                     "selenium:",
-                 })
-        {
-            if (!text.Contains(
-                    requiredSection,
-                    StringComparison.Ordinal))
-            {
-                throw new InvalidDataException(
-                    "保存した設定に必要な項目がありません: " +
-                    requiredSection);
-            }
-        }
     }
 
     private static string RemoveInlineComment(

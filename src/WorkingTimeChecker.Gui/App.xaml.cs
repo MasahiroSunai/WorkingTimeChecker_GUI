@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using WorkingTimeChecker.Core.Application;
+using WorkingTimeChecker.Core.Configuration;
 
 namespace WorkingTimeChecker.Gui;
 

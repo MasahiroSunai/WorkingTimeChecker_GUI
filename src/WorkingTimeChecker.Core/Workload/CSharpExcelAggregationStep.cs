@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using WorkingTimeChecker.Core.Configuration;
 
 namespace WorkingTimeChecker.Core.Workload;
 
@@ -19,23 +20,30 @@ public sealed class CSharpExcelAggregationStep
     private readonly AggregationReadBackValidator
         _validator;
 
+    private readonly ConfigFileService
+        _configFileService;
+
     public CSharpExcelAggregationStep()
         : this(
             new WorkloadAggregationRunner(),
-            new AggregationReadBackValidator()
-        )
+            new AggregationReadBackValidator(),
+            new ConfigFileService())
     {
     }
 
     internal CSharpExcelAggregationStep(
         WorkloadAggregationRunner aggregationRunner,
-        AggregationReadBackValidator validator)
+        AggregationReadBackValidator validator,
+        ConfigFileService configFileService)
     {
         _aggregationRunner =
             aggregationRunner;
 
         _validator =
             validator;
+
+        _configFileService =
+            configFileService;
     }
 
     public Task<int> RunAsync(
@@ -253,228 +261,40 @@ public sealed class CSharpExcelAggregationStep
         }
     }
 
-    private static string ResolveAggregateWorkbookPath(
-        string configPath)
+    private string ResolveAggregateWorkbookPath(string configPath)
     {
-        if (string.IsNullOrWhiteSpace(configPath))
-        {
-            throw new ArgumentException(
-                "config.yamlのパスが未指定です。",
-                nameof(configPath)
-            );
-        }
-
-        if (!File.Exists(configPath))
-        {
-            throw new FileNotFoundException(
-                "config.yamlが見つかりません。",
-                configPath
-            );
-        }
-
-        var lines =
-            File.ReadAllLines(configPath);
-
-        var targetMonthValue =
-            FindYamlValue(
-                lines,
-                TargetMonthSetting
-            );
-
-        var aggregatePathTemplate =
-            FindYamlValue(
-                lines,
-                AggregatePathSetting
-            );
+        var aggregatePath =
+            _configFileService.ReadScalar(
+                configPath,
+                "paths",
+                AggregatePathSetting);
 
         if (string.IsNullOrWhiteSpace(
-                aggregatePathTemplate))
+                aggregatePath))
         {
             throw new InvalidDataException(
                 "config.yamlにpaths." +
                 AggregatePathSetting +
-                "がありません。"
-            );
+                "が設定されていません。");
         }
 
         var targetMonth =
-            ResolveTargetMonth(
-                targetMonthValue
-            );
+            _configFileService.ReadScalar(
+                configPath,
+                "system",
+                TargetMonthSetting);
 
-        var expandedPath =
-            aggregatePathTemplate
-                .Replace(
-                    "{YYYY}",
-                    targetMonth.Year.ToString("0000"),
-                    StringComparison.Ordinal
-                )
-                .Replace(
-                    "{YY}",
-                    (targetMonth.Year % 100)
-                        .ToString("00"),
-                    StringComparison.Ordinal
-                )
-                .Replace(
-                    "{MM}",
-                    targetMonth.Month.ToString("00"),
-                    StringComparison.Ordinal
-                );
-
-        // config.yamlでは//server/share形式を使用しています。
-        // WindowsのUNC形式へ統一します。
-        if (expandedPath.StartsWith(
-                "//",
-                StringComparison.Ordinal))
+        if (!string.IsNullOrWhiteSpace(
+                targetMonth))
         {
-            expandedPath =
-                @"\\" +
-                expandedPath[2..]
-                    .Replace('/', '\\');
-        }
-        else
-        {
-            expandedPath =
-                expandedPath.Replace(
-                    '/',
-                    Path.DirectorySeparatorChar
-                );
+            aggregatePath =
+                aggregatePath.Replace(
+                    "{target_month}",
+                    targetMonth,
+                    StringComparison.Ordinal);
         }
 
-        return expandedPath;
-    }
-
-    private static DateTime ResolveTargetMonth(
-        string? settingValue)
-    {
-        if (string.IsNullOrWhiteSpace(settingValue) ||
-            string.Equals(
-                settingValue,
-                "auto",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            var now =
-                DateTime.Now;
-
-            return new DateTime(
-                now.Year,
-                now.Month,
-                1
-            );
-        }
-
-        if (DateTime.TryParseExact(
-                settingValue,
-                "yyyy-MM",
-                System.Globalization
-                    .CultureInfo
-                    .InvariantCulture,
-                System.Globalization
-                    .DateTimeStyles
-                    .None,
-                out var parsedMonth))
-        {
-            return parsedMonth;
-        }
-
-        throw new InvalidDataException(
-            "system.target_monthは" +
-            "YYYY-MMまたはautoで指定してください: " +
-            settingValue
-        );
-    }
-
-    private static string? FindYamlValue(
-        IReadOnlyList<string> lines,
-        string key)
-    {
-        var pattern =
-            "^\\s*" +
-            Regex.Escape(key) +
-            "\\s*:\\s*(.*?)\\s*$";
-
-        foreach (var sourceLine in lines)
-        {
-            var line =
-                RemoveYamlComment(
-                    sourceLine
-                );
-
-            var match =
-                Regex.Match(
-                    line,
-                    pattern
-                );
-
-            if (!match.Success)
-            {
-                continue;
-            }
-
-            return UnquoteYamlValue(
-                match.Groups[1].Value.Trim()
-            );
-        }
-
-        return null;
-    }
-
-    private static string RemoveYamlComment(
-        string line)
-    {
-        var inSingleQuote = false;
-        var inDoubleQuote = false;
-
-        for (var index = 0;
-             index < line.Length;
-             index++)
-        {
-            var character =
-                line[index];
-
-            if (character == '\'' &&
-                !inDoubleQuote)
-            {
-                inSingleQuote =
-                    !inSingleQuote;
-
-                continue;
-            }
-
-            if (character == '"' &&
-                !inSingleQuote)
-            {
-                inDoubleQuote =
-                    !inDoubleQuote;
-
-                continue;
-            }
-
-            if (character == '#' &&
-                !inSingleQuote &&
-                !inDoubleQuote)
-            {
-                return line[..index];
-            }
-        }
-
-        return line;
-    }
-
-    private static string UnquoteYamlValue(
-        string value)
-    {
-        if (value.Length >= 2)
-        {
-            if ((value[0] == '"' &&
-                 value[^1] == '"') ||
-                (value[0] == '\'' &&
-                 value[^1] == '\''))
-            {
-                return value[1..^1];
-            }
-        }
-
-        return value;
+        return Path.GetFullPath(
+            aggregatePath);
     }
 }
